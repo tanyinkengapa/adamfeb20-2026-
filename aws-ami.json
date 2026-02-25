@@ -15,7 +15,7 @@
             "region": "ap-south-1",
             "secret_key": "{{user `aws_secret_key`}}",
             "source_ami": "ami-02521d90e7410d9f0",
-            "ssh_username": "ubuntu",
+            "ssh_username": "jenkins",
             "temporary_key_pair_type": "ed25519",
             "type": "amazon-ebs",
             "security_group_id": "sg-029a2fcc32bdd45b1"
@@ -25,12 +25,12 @@
         {
             "type": "file",
             "source": "./jenkinsrole.tar",
-            "destination": "/home/ubuntu/"
+            "destination": "/home/jenkins/"
         },
         {
             "type": "file",
             "source": "./setup.sh",
-            "destination": "/home/ubuntu/"
+            "destination": "/home/jenkins/"
         },
         {
             "type": "shell",
@@ -39,5 +39,6 @@
     ]
 
 }
+
 
 
