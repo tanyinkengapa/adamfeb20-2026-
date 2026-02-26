@@ -34,11 +34,12 @@
         },
         {
             "type": "shell",
-            "inline": ["./setup.sh {{user `efsid`}}"]
+            "inline": ["sudo ./setup.sh {{user `efsid`}}"]
         }
     ]
 
 }
+
 
 
 
