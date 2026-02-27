@@ -14,6 +14,9 @@ data "aws_efs_file_system" "myefs" {
 }
 
 resource "null_resource" "script_file" {
+triggers = {
+    rebuild = timestamp()
+  }
   provisioner "local-exec" {
     command = "packer build -var efsid=${data.aws_efs_file_system.myefs.id} aws-ami.json"
   }
@@ -22,4 +25,5 @@ resource "null_resource" "script_file" {
 #---------------------------------------------#
 # Author: Adam WezvaTechnologies
 # Call/Whatsapp: +91-9739110917
+
 #---------------------------------------------#
