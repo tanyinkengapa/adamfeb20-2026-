@@ -18,8 +18,8 @@
     repo: "deb [signed-by=/usr/share/keyrings/jenkins-keyring.gpg] {{ jenkins_repo }} binary/"
     state: present
   - name: Install required packages
-  apt:
-    name:
+    apt:
+     name:
       - gnupg
       - curl
     state: present
