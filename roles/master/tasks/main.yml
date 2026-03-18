@@ -8,7 +8,7 @@
  - name: Install Jenkins key (dearmored)
    ansible.builtin.shell: |
     curl -fsSL {{ jenkins_repo }}/jenkins.io-2023.key | gpg --dearmor -o /usr/share/keyrings/jenkins-keyring.gpg
-  args:
+   args:
     creates: /usr/share/keyrings/jenkins-keyring.gpg
 
 #- name: ensure the repository is configured
