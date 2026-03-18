@@ -4,19 +4,22 @@
 #---------------------------------------------#
 
 # - name: ensure the jenkins apt repository key is installed
-# get_url: url="{{jenkins_repo}}/jenkins.io-2023.key" dest="/usr/share/keyrings/jenkins-keyring.asc" 
- - name: Install Jenkins key (dearmored)
-   ansible.builtin.shell: |
+#   get_url: url="{{jenkins_repo}}/jenkins.io-2023.key" dest="/usr/share/keyrings/jenkins-keyring.asc"
+
+- name: Install Jenkins key (dearmored)
+  ansible.builtin.shell: |
     curl -fsSL {{ jenkins_repo }}/jenkins.io-2023.key | gpg --dearmor -o /usr/share/keyrings/jenkins-keyring.gpg
-   args:
+  args:
     creates: /usr/share/keyrings/jenkins-keyring.gpg
+
 - name: ensure the repository is configured
   apt_repository:
     repo: "deb [signed-by=/usr/share/keyrings/jenkins-keyring.gpg] {{ jenkins_repo }} binary/"
     state: present
-  - name: Install required packages
-    apt:
-     name:
+
+- name: Install required packages
+  apt:
+    name:
       - gnupg
       - curl
     state: present
@@ -30,10 +33,10 @@
 - name: Install Java & fontconfig
   package: name={{item}} state=present
   loop:
-  - "{{java}}"
-  - fontconfig
-  - nfs-common
-  - mount
+    - "{{java}}"
+    - fontconfig
+    - nfs-common
+    - mount
 
 - name: ensure jenkins is installed
   apt: name=jenkins state=latest
@@ -48,7 +51,7 @@
 
 - name: echo efs
   command: echo "efs"
-  
+
 - name: Ensure EFS entry exists in /var/lib/jenkins
   command: sudo mount -t nfs4 -o nfsvers=4.1 {{efs}}.efs.ap-south-1.amazonaws.com:/ /var/lib/jenkins/
 
