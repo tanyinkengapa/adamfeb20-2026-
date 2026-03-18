@@ -12,6 +12,10 @@
 - name: ensure the repository is configured
   command: echo "deb https://pkg.jenkins.io/debian-stable binary/" | sudo tee /etc/apt/sources.list.d/jenkins.list
 
+- name: Update apt cache after adding Jenkins repo
+  apt:
+    update_cache: yes
+
 - name: Install required packages
   apt:
     name:
