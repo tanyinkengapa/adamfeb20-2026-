@@ -3,11 +3,27 @@
 # Call/Whatsapp: +91-9739110917
 #---------------------------------------------#
 
-- name: ensure the jenkins apt repository key is installed
-  get_url: url="{{jenkins_repo}}/jenkins.io-2023.key" dest="/usr/share/keyrings/jenkins-keyring.asc" 
+# - name: ensure the jenkins apt repository key is installed
+# get_url: url="{{jenkins_repo}}/jenkins.io-2023.key" dest="/usr/share/keyrings/jenkins-keyring.asc" 
+ - name: Install Jenkins key (dearmored)
+   ansible.builtin.shell: |
+    curl -fsSL {{ jenkins_repo }}/jenkins.io-2023.key | gpg --dearmor -o /usr/share/keyrings/jenkins-keyring.gpg
+  args:
+    creates: /usr/share/keyrings/jenkins-keyring.gpg
 
+#- name: ensure the repository is configured
+#  apt_repository: repo="deb [signed-by=/usr/share/keyrings/jenkins-keyring.asc] {{jenkins_repo}} binary/" state=present
 - name: ensure the repository is configured
-  apt_repository: repo="deb [signed-by=/usr/share/keyrings/jenkins-keyring.asc] {{jenkins_repo}} binary/" state=present
+  apt_repository:
+    repo: "deb [signed-by=/usr/share/keyrings/jenkins-keyring.gpg] {{ jenkins_repo }} binary/"
+    state: present
+  - name: Install required packages
+  apt:
+    name:
+      - gnupg
+      - curl
+    state: present
+    update_cache: yes
 
 - name: Update and upgrade apt packages
   apt:
