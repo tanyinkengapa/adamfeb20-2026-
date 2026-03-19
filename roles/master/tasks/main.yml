@@ -1,60 +1,91 @@
-#---------------------------------------------#
-# Author: Adam WezvaTechnologies
-# Call/Whatsapp: +91-9739110917
-#---------------------------------------------#
+# -------------------------------
+# Jenkins Installation (FIXED)
+# -------------------------------
 
-# - name: ensure the jenkins apt repository key is installed
-#   get_url: url="{{jenkins_repo}}/jenkins.io-2023.key" dest="/usr/share/keyrings/jenkins-keyring.asc"
-
-- name: Install Jenkins key (dearmored)
-  command: sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 7198F4B714ABFC68
-
-- name: ensure the repository is configured
-  command: echo "deb https://pkg.jenkins.io/debian-stable binary/" | sudo tee /etc/apt/sources.list.d/jenkins.list
-
-- name: Update apt cache after adding Jenkins repo
-  apt:
-    update_cache: yes
-
-- name: Install required packages
+- name: Install required dependencies
   apt:
     name:
-      - gnupg
       - curl
+      - gnupg
     state: present
     update_cache: yes
 
-- name: Update and upgrade apt packages
+- name: Add Jenkins key (dearmored)
+  shell: |
+    curl -fsSL {{ jenkins_repo }}/jenkins.io-2023.key | gpg --dearmor -o /usr/share/keyrings/jenkins-keyring.gpg
+  args:
+    creates: /usr/share/keyrings/jenkins-keyring.gpg
+
+- name: Add Jenkins repository
+  apt_repository:
+    repo: "deb [signed-by=/usr/share/keyrings/jenkins-keyring.gpg] {{ jenkins_repo }} binary/"
+    state: present
+
+- name: Update apt cache after adding repo
   apt:
-    upgrade: yes
     update_cache: yes
 
-- name: Install Java & fontconfig
-  package: name={{item}} state=present
-  loop:
-    - "{{java}}"
-    - fontconfig
-    - nfs-common
-    - mount
+# -------------------------------
+# Java (Required for Jenkins)
+# -------------------------------
 
-- name: ensure jenkins is installed
-  apt: name=jenkins state=latest
+- name: Install Java & dependencies
+  apt:
+    name:
+      - "{{ java }}"
+      - fontconfig
+      - nfs-common
+    state: present
 
-# - name: Ensure EFS entry exists in /etc/fstab
-#   mount:
-#     path: /var/lib/jenkins
-#     src: "{{efs}}.efs.ap-south-1.amazonaws.com:/"
-#     fstype: nfs4
-#     opts: "_netdev"
-#     state: mounted
+# -------------------------------
+# Install Jenkins
+# -------------------------------
 
-- name: echo efs
-  command: echo "efs"
+- name: Install Jenkins
+  apt:
+    name: jenkins
+    state: present
 
-- name: Ensure EFS entry exists in /var/lib/jenkins
-  command: sudo mount -t nfs4 -o nfsvers=4.1 {{efs}}.efs.ap-south-1.amazonaws.com:/ /var/lib/jenkins/
+# -------------------------------
+# Start Jenkins (CRITICAL)
+# -------------------------------
 
-- name: Ensure EFS entry exists in /etc/fstab
+- name: Enable and start Jenkins
+  systemd:
+    name: jenkins
+    enabled: yes
+    state: started
+
+# -------------------------------
+# Verify Jenkins installation (FAIL FAST)
+# -------------------------------
+
+- name: Verify Jenkins installation
+  command: dpkg -l | grep jenkins
+  register: jenkins_check
+  failed_when: jenkins_check.rc != 0
+
+# -------------------------------
+# Wait for Jenkins (port 8080)
+# -------------------------------
+
+- name: Wait for Jenkins to start
+  wait_for:
+    port: 8080
+    timeout: 180
+
+# -------------------------------
+# EFS Mount (AFTER Jenkins is installed)
+# -------------------------------
+
+- name: Ensure Jenkins directory exists
+  file:
+    path: /var/lib/jenkins
+    state: directory
+    owner: jenkins
+    group: jenkins
+
+- name: Mount EFS
   mount:
     path: /var/lib/jenkins
     src: "{{efs}}.efs.ap-south-1.amazonaws.com:/"
@@ -62,7 +93,7 @@
     opts: "_netdev"
     state: mounted
 
-- name: Ensure EFS entry exists in /etc/fstab
+- name: Persist EFS in fstab
   mount:
     path: /var/lib/jenkins
     src: "{{efs}}.efs.ap-south-1.amazonaws.com:/"
@@ -70,32 +101,19 @@
     opts: "_netdev"
     state: present
 
-- name: Change permission back to Jenkins user
+- name: Fix permissions after mount
   file:
     path: /var/lib/jenkins
     owner: jenkins
     group: jenkins
-    state: directory
     recurse: yes
 
-- name: Mount all file systems from fstab
-  command: mount -a
-  when: ansible_mounts | selectattr('mount', '==', '/var/lib/jenkins') | list | length == 0
+# -------------------------------
+# Final Check
+# -------------------------------
 
-- name: Check if port 8080 is listening
+- name: Check if Jenkins is responding
   wait_for:
     port: 8080
-    timeout: 180
-    msg: "Timeout waiting for 8080 to respond"
-  register: port_check
-  ignore_errors: yes
-
-- name: Print message if Jenkins is not running
-  debug:
-    msg: "*== Jenkins NOT Running ==*"
-  when: port_check.failed == true
-
-#---------------------------------------------#
-# Author: Adam WezvaTechnologies
-# Call/Whatsapp: +91-9739110917
-#---------------------------------------------#
+    timeout: 120
+    msg: "Jenkins failed to start"
