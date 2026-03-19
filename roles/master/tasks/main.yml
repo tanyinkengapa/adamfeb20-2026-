@@ -1,57 +1,60 @@
 ---
-- name: Remove ALL Jenkins repo traces
+- name: Remove old Jenkins repo
   file:
-    path: "{{ item }}"
+    path: /etc/apt/sources.list.d/jenkins.list
     state: absent
-  loop:
-    - /etc/apt/sources.list.d/jenkins.list
-    - /usr/share/keyrings/jenkins-keyring.gpg
+
+- name: Clean apt lists
+  file:
+    path: /var/lib/apt/lists/
+    state: absent
 
 - name: Clean apt cache
   apt:
     clean: yes
 
-- name: Install dependencies
-  apt:
-    name:
-      - openjdk-17-jdk
-      - wget
-      - curl
-      - gnupg
-    state: present
-    update_cache: yes
-
-# 🔥 Download Jenkins key
-- name: Download Jenkins key
-  get_url:
-    url: https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key
-    dest: /tmp/jenkins.key
-
-# 🔥 Convert key to .gpg (CRITICAL STEP)
-- name: Dearmor Jenkins key
+# 🔥 Use apt-key (your working method)
+- name: Add Jenkins key (legacy but working)
   command: >
-    gpg --dearmor -o /usr/share/keyrings/jenkins-keyring.gpg /tmp/jenkins.key
+    apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 7198F4B714ABFC68
   args:
-    creates: /usr/share/keyrings/jenkins-keyring.gpg
+    warn: false
 
-# 🔥 Add repo using correct key format
+# 🔥 Add Jenkins repo
 - name: Add Jenkins repository
-  apt_repository:
-    repo: "deb [signed-by=/usr/share/keyrings/jenkins-keyring.gpg] https://pkg.jenkins.io/debian-stable binary/"
-    state: present
-    filename: jenkins
+  copy:
+    dest: /etc/apt/sources.list.d/jenkins.list
+    content: "deb https://pkg.jenkins.io/debian-stable binary/\n"
 
 - name: Update apt cache
   apt:
     update_cache: yes
+
+- name: Install Java
+  apt:
+    name: openjdk-17-jdk
+    state: present
 
 - name: Install Jenkins
   apt:
     name: jenkins
     state: present
 
-- name: Start and enable Jenkins
+- name: Enable Jenkins
+  systemd:
+    name: jenkins
+    enabled: yes
+
+- name: Start Jenkins
   systemd:
     name: jenkins
     state: started
-    enabled: yes
+
+- name: Check Jenkins status
+  command: systemctl status jenkins
+  register: jenkins_status
+  changed_when: false
+
+- name: Debug Jenkins status
+  debug:
+    var: jenkins_status.stdout
