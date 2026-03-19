@@ -1,50 +1,135 @@
-- name: Install required dependencies
-  apt:
-    name:
-      - curl
-      - gnupg
-      - ca-certificates
-    state: present
-    update_cache: yes
+---
+- hosts: all
+  become: yes
+  tasks:
 
-# ✅ Correct Jenkins key installation (FIX)
-- name: Add Jenkins GPG key
-  shell: |
-    curl -fsSL https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key \
-    | gpg --dearmor -o /usr/share/keyrings/jenkins-keyring.gpg
-  args:
-    creates: /usr/share/keyrings/jenkins-keyring.gpg
+  # -------------------------------
+  # 🔥 HARD RESET JENKINS REPO
+  # -------------------------------
+  - name: Remove ALL Jenkins repo traces
+    shell: |
+      rm -f /etc/apt/sources.list.d/jenkins.list
+      sed -i '/jenkins/d' /etc/apt/sources.list || true
+      rm -f /usr/share/keyrings/jenkins-keyring.*
+    args:
+      executable: /bin/bash
 
-# ✅ Correct repo format for Ubuntu 24.04
-- name: Add Jenkins repository
-  apt_repository:
-    repo: "deb [signed-by=/usr/share/keyrings/jenkins-keyring.gpg] https://pkg.jenkins.io/debian-stable binary/"
-    state: present
-    filename: jenkins
+  - name: Clean apt
+    command: apt-get clean
 
-# ✅ Update apt cache AFTER repo is added
-- name: Update apt cache
-  apt:
-    update_cache: yes
+  # -------------------------------
+  # 📦 BASE DEPENDENCIES
+  # -------------------------------
+  - name: Install dependencies
+    apt:
+      name:
+        - curl
+        - gnupg
+        - ca-certificates
+      state: present
+      update_cache: yes
 
-# ✅ Install Java (REQUIRED for Jenkins)
-- name: Install Java & required packages
-  apt:
-    name:
-      - openjdk-17-jdk
-      - fontconfig
-      - nfs-common
-    state: present
+  # -------------------------------
+  # 🔐 ADD JENKINS KEY (FIXED)
+  # -------------------------------
+  - name: Add Jenkins key (force recreate)
+    shell: |
+      curl -fsSL https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key \
+      | gpg --dearmor | tee /usr/share/keyrings/jenkins-keyring.gpg > /dev/null
+    args:
+      executable: /bin/bash
 
-# ✅ Install Jenkins
-- name: Install Jenkins
-  apt:
-    name: jenkins
-    state: latest
+  # -------------------------------
+  # 📡 ADD JENKINS REPO
+  # -------------------------------
+  - name: Add Jenkins repo (clean)
+    shell: |
+      echo "deb [signed-by=/usr/share/keyrings/jenkins-keyring.gpg] https://pkg.jenkins.io/debian-stable binary/" \
+      > /etc/apt/sources.list.d/jenkins.list
 
-# ✅ Ensure Jenkins is started
-- name: Start and enable Jenkins
-  systemd:
-    name: jenkins
-    state: started
-    enabled: yes
+  # -------------------------------
+  # 🔄 UPDATE APT
+  # -------------------------------
+  - name: Update apt cache
+    command: apt-get update
+
+  # -------------------------------
+  # ☕ INSTALL JAVA + REQUIRED PKGS
+  # -------------------------------
+  - name: Install Java & required packages
+    apt:
+      name:
+        - openjdk-17-jdk
+        - fontconfig
+        - nfs-common
+      state: present
+
+  # -------------------------------
+  # 🚀 INSTALL JENKINS
+  # -------------------------------
+  - name: Install Jenkins
+    apt:
+      name: jenkins
+      state: present
+
+  # -------------------------------
+  # 📁 CREATE JENKINS DIR (before EFS)
+  # -------------------------------
+  - name: Ensure Jenkins directory exists
+    file:
+      path: /var/lib/jenkins
+      state: directory
+
+  # -------------------------------
+  # 🌐 MOUNT EFS (CLEAN VERSION)
+  # -------------------------------
+  - name: Mount EFS
+    mount:
+      path: /var/lib/jenkins
+      src: "{{efs}}.efs.ap-south-1.amazonaws.com:/"
+      fstype: nfs4
+      opts: "_netdev,nfsvers=4.1"
+      state: mounted
+
+  - name: Ensure EFS persists in fstab
+    mount:
+      path: /var/lib/jenkins
+      src: "{{efs}}.efs.ap-south-1.amazonaws.com:/"
+      fstype: nfs4
+      opts: "_netdev,nfsvers=4.1"
+      state: present
+
+  # -------------------------------
+  # 🔐 FIX PERMISSIONS
+  # -------------------------------
+  - name: Set Jenkins directory permissions
+    file:
+      path: /var/lib/jenkins
+      owner: jenkins
+      group: jenkins
+      recurse: yes
+
+  # -------------------------------
+  # ▶️ START JENKINS
+  # -------------------------------
+  - name: Start and enable Jenkins
+    systemd:
+      name: jenkins
+      state: started
+      enabled: yes
+
+  # -------------------------------
+  # 🔍 CHECK PORT 8080
+  # -------------------------------
+  - name: Check if port 8080 is listening
+    wait_for:
+      port: 8080
+      timeout: 180
+      msg: "Timeout waiting for Jenkins on port 8080"
+    register: port_check
+    ignore_errors: yes
+
+  - name: Print message if Jenkins is not running
+    debug:
+      msg: "*== Jenkins NOT Running ==*"
+    when: port_check.failed == true
