@@ -1,135 +1,114 @@
----
-- hosts: all
-  become: yes
-  tasks:
+# -------------------------------
+# 🔥 HARD RESET JENKINS REPO
+# -------------------------------
+- name: Remove ALL Jenkins repo traces
+  shell: |
+    rm -f /etc/apt/sources.list.d/jenkins.list
+    sed -i '/jenkins/d' /etc/apt/sources.list || true
+    rm -f /usr/share/keyrings/jenkins-keyring.*
+  args:
+    executable: /bin/bash
 
-  # -------------------------------
-  # 🔥 HARD RESET JENKINS REPO
-  # -------------------------------
-  - name: Remove ALL Jenkins repo traces
-    shell: |
-      rm -f /etc/apt/sources.list.d/jenkins.list
-      sed -i '/jenkins/d' /etc/apt/sources.list || true
-      rm -f /usr/share/keyrings/jenkins-keyring.*
-    args:
-      executable: /bin/bash
+- name: Clean apt
+  command: apt-get clean
 
-  - name: Clean apt
-    command: apt-get clean
+# -------------------------------
+# 📦 BASE DEPENDENCIES
+# -------------------------------
+- name: Install dependencies
+  apt:
+    name:
+      - curl
+      - gnupg
+      - ca-certificates
+    state: present
+    update_cache: yes
 
-  # -------------------------------
-  # 📦 BASE DEPENDENCIES
-  # -------------------------------
-  - name: Install dependencies
-    apt:
-      name:
-        - curl
-        - gnupg
-        - ca-certificates
-      state: present
-      update_cache: yes
+# -------------------------------
+# 🔐 ADD JENKINS KEY
+# -------------------------------
+- name: Add Jenkins key (force recreate)
+  shell: |
+    curl -fsSL https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key \
+    | gpg --dearmor | tee /usr/share/keyrings/jenkins-keyring.gpg > /dev/null
+  args:
+    executable: /bin/bash
 
-  # -------------------------------
-  # 🔐 ADD JENKINS KEY (FIXED)
-  # -------------------------------
-  - name: Add Jenkins key (force recreate)
-    shell: |
-      curl -fsSL https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key \
-      | gpg --dearmor | tee /usr/share/keyrings/jenkins-keyring.gpg > /dev/null
-    args:
-      executable: /bin/bash
+# -------------------------------
+# 📡 ADD JENKINS REPO
+# -------------------------------
+- name: Add Jenkins repo
+  shell: |
+    echo "deb [signed-by=/usr/share/keyrings/jenkins-keyring.gpg] https://pkg.jenkins.io/debian-stable binary/" \
+    > /etc/apt/sources.list.d/jenkins.list
 
-  # -------------------------------
-  # 📡 ADD JENKINS REPO
-  # -------------------------------
-  - name: Add Jenkins repo (clean)
-    shell: |
-      echo "deb [signed-by=/usr/share/keyrings/jenkins-keyring.gpg] https://pkg.jenkins.io/debian-stable binary/" \
-      > /etc/apt/sources.list.d/jenkins.list
+# -------------------------------
+# 🔄 UPDATE APT
+# -------------------------------
+- name: Update apt cache
+  command: apt-get update
 
-  # -------------------------------
-  # 🔄 UPDATE APT
-  # -------------------------------
-  - name: Update apt cache
-    command: apt-get update
+# -------------------------------
+# ☕ INSTALL JAVA
+# -------------------------------
+- name: Install Java & required packages
+  apt:
+    name:
+      - openjdk-17-jdk
+      - fontconfig
+      - nfs-common
+    state: present
 
-  # -------------------------------
-  # ☕ INSTALL JAVA + REQUIRED PKGS
-  # -------------------------------
-  - name: Install Java & required packages
-    apt:
-      name:
-        - openjdk-17-jdk
-        - fontconfig
-        - nfs-common
-      state: present
+# -------------------------------
+# 🚀 INSTALL JENKINS
+# -------------------------------
+- name: Install Jenkins
+  apt:
+    name: jenkins
+    state: present
 
-  # -------------------------------
-  # 🚀 INSTALL JENKINS
-  # -------------------------------
-  - name: Install Jenkins
-    apt:
-      name: jenkins
-      state: present
+# -------------------------------
+# 📁 CREATE DIR
+# -------------------------------
+- name: Ensure Jenkins directory exists
+  file:
+    path: /var/lib/jenkins
+    state: directory
 
-  # -------------------------------
-  # 📁 CREATE JENKINS DIR (before EFS)
-  # -------------------------------
-  - name: Ensure Jenkins directory exists
-    file:
-      path: /var/lib/jenkins
-      state: directory
+# -------------------------------
+# 🌐 MOUNT EFS
+# -------------------------------
+- name: Mount EFS
+  mount:
+    path: /var/lib/jenkins
+    src: "{{efs}}.efs.ap-south-1.amazonaws.com:/"
+    fstype: nfs4
+    opts: "_netdev,nfsvers=4.1"
+    state: mounted
 
-  # -------------------------------
-  # 🌐 MOUNT EFS (CLEAN VERSION)
-  # -------------------------------
-  - name: Mount EFS
-    mount:
-      path: /var/lib/jenkins
-      src: "{{efs}}.efs.ap-south-1.amazonaws.com:/"
-      fstype: nfs4
-      opts: "_netdev,nfsvers=4.1"
-      state: mounted
+- name: Persist EFS mount
+  mount:
+    path: /var/lib/jenkins
+    src: "{{efs}}.efs.ap-south-1.amazonaws.com:/"
+    fstype: nfs4
+    opts: "_netdev,nfsvers=4.1"
+    state: present
 
-  - name: Ensure EFS persists in fstab
-    mount:
-      path: /var/lib/jenkins
-      src: "{{efs}}.efs.ap-south-1.amazonaws.com:/"
-      fstype: nfs4
-      opts: "_netdev,nfsvers=4.1"
-      state: present
+# -------------------------------
+# 🔐 PERMISSIONS
+# -------------------------------
+- name: Set Jenkins directory permissions
+  file:
+    path: /var/lib/jenkins
+    owner: jenkins
+    group: jenkins
+    recurse: yes
 
-  # -------------------------------
-  # 🔐 FIX PERMISSIONS
-  # -------------------------------
-  - name: Set Jenkins directory permissions
-    file:
-      path: /var/lib/jenkins
-      owner: jenkins
-      group: jenkins
-      recurse: yes
-
-  # -------------------------------
-  # ▶️ START JENKINS
-  # -------------------------------
-  - name: Start and enable Jenkins
-    systemd:
-      name: jenkins
-      state: started
-      enabled: yes
-
-  # -------------------------------
-  # 🔍 CHECK PORT 8080
-  # -------------------------------
-  - name: Check if port 8080 is listening
-    wait_for:
-      port: 8080
-      timeout: 180
-      msg: "Timeout waiting for Jenkins on port 8080"
-    register: port_check
-    ignore_errors: yes
-
-  - name: Print message if Jenkins is not running
-    debug:
-      msg: "*== Jenkins NOT Running ==*"
-    when: port_check.failed == true
+# -------------------------------
+# ▶️ START JENKINS
+# -------------------------------
+- name: Start and enable Jenkins
+  systemd:
+    name: jenkins
+    state: started
+    enabled: yes
