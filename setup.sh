@@ -21,7 +21,8 @@ tar -xvf jenkinsrole.tar
 echo "#------------------------------------------------------------#"
 echo "-- Running ansible playbook to install Jenkins --"
 echo "#------------------------------------------------------------#"
-ansible-playbook jenkins.yml -e "efs=$efs"
+# ansible-playbook jenkins.yml -e "efs=$efs"
+ansible-playbook -i localhost, -c local jenkins.yml  -e "efs=$efs"
 
 echo "#----------------------#"
 echo "-- Remove ansible --"
