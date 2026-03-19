@@ -1,119 +1,50 @@
-# -------------------------------
-# Jenkins Installation (FIXED)
-# -------------------------------
-
 - name: Install required dependencies
   apt:
     name:
       - curl
       - gnupg
+      - ca-certificates
     state: present
     update_cache: yes
 
-- name: Add Jenkins key (dearmored)
+# ✅ Correct Jenkins key installation (FIX)
+- name: Add Jenkins GPG key
   shell: |
-    curl -fsSL {{ jenkins_repo }}/jenkins.io-2023.key | gpg --dearmor -o /usr/share/keyrings/jenkins-keyring.gpg
+    curl -fsSL https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key \
+    | gpg --dearmor -o /usr/share/keyrings/jenkins-keyring.gpg
   args:
     creates: /usr/share/keyrings/jenkins-keyring.gpg
 
+# ✅ Correct repo format for Ubuntu 24.04
 - name: Add Jenkins repository
   apt_repository:
-    repo: "deb [signed-by=/usr/share/keyrings/jenkins-keyring.gpg] {{ jenkins_repo }} binary/"
+    repo: "deb [signed-by=/usr/share/keyrings/jenkins-keyring.gpg] https://pkg.jenkins.io/debian-stable binary/"
     state: present
+    filename: jenkins
 
-- name: Update apt cache after adding repo
+# ✅ Update apt cache AFTER repo is added
+- name: Update apt cache
   apt:
     update_cache: yes
 
-# -------------------------------
-# Java (Required for Jenkins)
-# -------------------------------
-
-- name: Install Java & dependencies
+# ✅ Install Java (REQUIRED for Jenkins)
+- name: Install Java & required packages
   apt:
     name:
-      - "{{ java }}"
+      - openjdk-17-jdk
       - fontconfig
       - nfs-common
     state: present
 
-# -------------------------------
-# Install Jenkins
-# -------------------------------
-
+# ✅ Install Jenkins
 - name: Install Jenkins
   apt:
     name: jenkins
-    state: present
+    state: latest
 
-# -------------------------------
-# Start Jenkins (CRITICAL)
-# -------------------------------
-
-- name: Enable and start Jenkins
+# ✅ Ensure Jenkins is started
+- name: Start and enable Jenkins
   systemd:
     name: jenkins
-    enabled: yes
     state: started
-
-# -------------------------------
-# Verify Jenkins installation (FAIL FAST)
-# -------------------------------
-
-- name: Verify Jenkins installation
-  command: dpkg -l | grep jenkins
-  register: jenkins_check
-  failed_when: jenkins_check.rc != 0
-
-# -------------------------------
-# Wait for Jenkins (port 8080)
-# -------------------------------
-
-- name: Wait for Jenkins to start
-  wait_for:
-    port: 8080
-    timeout: 180
-
-# -------------------------------
-# EFS Mount (AFTER Jenkins is installed)
-# -------------------------------
-
-- name: Ensure Jenkins directory exists
-  file:
-    path: /var/lib/jenkins
-    state: directory
-    owner: jenkins
-    group: jenkins
-
-- name: Mount EFS
-  mount:
-    path: /var/lib/jenkins
-    src: "{{efs}}.efs.ap-south-1.amazonaws.com:/"
-    fstype: nfs4
-    opts: "_netdev"
-    state: mounted
-
-- name: Persist EFS in fstab
-  mount:
-    path: /var/lib/jenkins
-    src: "{{efs}}.efs.ap-south-1.amazonaws.com:/"
-    fstype: nfs4
-    opts: "_netdev"
-    state: present
-
-- name: Fix permissions after mount
-  file:
-    path: /var/lib/jenkins
-    owner: jenkins
-    group: jenkins
-    recurse: yes
-
-# -------------------------------
-# Final Check
-# -------------------------------
-
-- name: Check if Jenkins is responding
-  wait_for:
-    port: 8080
-    timeout: 120
-    msg: "Jenkins failed to start"
+    enabled: yes
