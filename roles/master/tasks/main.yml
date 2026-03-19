@@ -1,4 +1,3 @@
----
 - name: Remove old Jenkins repo
   file:
     path: /etc/apt/sources.list.d/jenkins.list
@@ -17,18 +16,21 @@
   apt:
     name:
       - openjdk-17-jdk
-      - wget
-      - curl
       - gnupg
+      - dirmngr
+      - curl
     state: present
     update_cache: yes
 
-# 🔥 Reliable key install (no keyserver issues)
-- name: Add Jenkins key
+# 🔥 FIXED: Use keyserver WITH retry + proper env
+- name: Add Jenkins key (retry)
   shell: |
-    curl -fsSL https://pkg.jenkins.io/debian-stable/jenkins.io.key | apt-key add -
-  args:
-    executable: /bin/bash
+    apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 \
+                --recv-keys 7198F4B714ABFC68
+  register: key_result
+  retries: 5
+  delay: 10
+  until: key_result.rc == 0
 
 - name: Add Jenkins repository
   copy:
