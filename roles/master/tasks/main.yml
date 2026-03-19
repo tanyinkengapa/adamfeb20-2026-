@@ -13,14 +13,23 @@
   apt:
     clean: yes
 
-# 🔥 Use apt-key (your working method)
-- name: Add Jenkins key (legacy but working)
-  command: >
-    apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 7198F4B714ABFC68
-  args:
-    warn: false
+- name: Install dependencies
+  apt:
+    name:
+      - openjdk-17-jdk
+      - wget
+      - curl
+      - gnupg
+    state: present
+    update_cache: yes
 
-# 🔥 Add Jenkins repo
+# 🔥 Reliable key install (no keyserver issues)
+- name: Add Jenkins key
+  shell: |
+    curl -fsSL https://pkg.jenkins.io/debian-stable/jenkins.io.key | apt-key add -
+  args:
+    executable: /bin/bash
+
 - name: Add Jenkins repository
   copy:
     dest: /etc/apt/sources.list.d/jenkins.list
@@ -30,31 +39,13 @@
   apt:
     update_cache: yes
 
-- name: Install Java
-  apt:
-    name: openjdk-17-jdk
-    state: present
-
 - name: Install Jenkins
   apt:
     name: jenkins
     state: present
 
-- name: Enable Jenkins
+- name: Enable and start Jenkins
   systemd:
     name: jenkins
     enabled: yes
-
-- name: Start Jenkins
-  systemd:
-    name: jenkins
     state: started
-
-- name: Check Jenkins status
-  command: systemctl status jenkins
-  register: jenkins_status
-  changed_when: false
-
-- name: Debug Jenkins status
-  debug:
-    var: jenkins_status.stdout
