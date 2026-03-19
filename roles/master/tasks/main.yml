@@ -5,7 +5,7 @@
     state: absent
   loop:
     - /etc/apt/sources.list.d/jenkins.list
-    - /usr/share/keyrings/jenkins-keyring.asc
+    - /usr/share/keyrings/jenkins-keyring.gpg
 
 - name: Clean apt cache
   apt:
@@ -21,17 +21,23 @@
     state: present
     update_cache: yes
 
-# ✅ FIXED: Add Jenkins GPG key (modern method)
-- name: Add Jenkins GPG key
-  ansible.builtin.get_url:
+# 🔥 Download Jenkins key
+- name: Download Jenkins key
+  get_url:
     url: https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key
-    dest: /usr/share/keyrings/jenkins-keyring.asc
-    mode: '0644'
+    dest: /tmp/jenkins.key
 
-# ✅ FIXED: Add Jenkins repository using signed-by
+# 🔥 Convert key to .gpg (CRITICAL STEP)
+- name: Dearmor Jenkins key
+  command: >
+    gpg --dearmor -o /usr/share/keyrings/jenkins-keyring.gpg /tmp/jenkins.key
+  args:
+    creates: /usr/share/keyrings/jenkins-keyring.gpg
+
+# 🔥 Add repo using correct key format
 - name: Add Jenkins repository
-  ansible.builtin.apt_repository:
-    repo: "deb [signed-by=/usr/share/keyrings/jenkins-keyring.asc] https://pkg.jenkins.io/debian-stable binary/"
+  apt_repository:
+    repo: "deb [signed-by=/usr/share/keyrings/jenkins-keyring.gpg] https://pkg.jenkins.io/debian-stable binary/"
     state: present
     filename: jenkins
 
